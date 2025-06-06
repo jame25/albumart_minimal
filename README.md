@@ -2,6 +2,9 @@
 
 A clean, minimalist web interface for foobar2000 that displays full-screen album art with elegant hover controls.
 
+![albumart_minimal](https://github.com/user-attachments/assets/8336bc4c-4743-45ec-a771-af1458e698f5)
+
+
 ## Features
 
 ### 🎨 **Minimal Album Art Display**
