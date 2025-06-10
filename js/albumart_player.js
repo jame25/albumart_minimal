@@ -134,10 +134,8 @@ function updateUI() {
     // Update album art dynamically
     updateAlbumArt();
     
-    // Schedule next update if playing
-    if (fb.isPlaying == '1') {
-        retrievestate_schedule(refresh_interval);
-    }
+    // Schedule next update - continue polling even when paused for album art updates
+    retrievestate_schedule(refresh_interval);
 }
 
 function updateAlbumArt() {
