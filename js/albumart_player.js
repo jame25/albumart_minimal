@@ -2,6 +2,8 @@ var fb;
 var isworking = false;
 var refresh_interval = 1000;
 var timeoutid;
+var currentAlbumArt = null;
+var isAnimating = false;
 
 function startwork() {
     isworking = true;
@@ -103,6 +105,52 @@ function retrievestate(cmd, p1) {
     });
 }
 
+function animateAlbumArt(newArtUrl) {
+    if (isAnimating) return;
+    
+    isAnimating = true;
+    
+    // Preload the new image to ensure smooth animation
+    var newImg = new Image();
+    newImg.onload = function() {
+        console.log('New image preloaded, starting animation');
+        
+        // Set up the next album art image
+        $('#albumart-next').attr('src', newArtUrl).show();
+        
+        // Animate the wrapper to slide left
+        $('#albumart-wrapper').css('transform', 'translateX(-100%)');
+        
+        // After animation completes
+        setTimeout(function() {
+            // Swap the images
+            $('#albumart-current').attr('src', newArtUrl);
+            $('#albumart-next').hide();
+            
+            // Reset the wrapper position instantly
+            $('#albumart-wrapper').css('transition', 'none');
+            $('#albumart-wrapper').css('transform', 'translateX(0)');
+            
+            // Re-enable transitions after a short delay
+            setTimeout(function() {
+                $('#albumart-wrapper').css('transition', 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)');
+                isAnimating = false;
+                currentAlbumArt = newArtUrl;
+                console.log('Animation complete');
+            }, 50);
+        }, 600); // Match CSS animation duration
+    };
+    
+    newImg.onerror = function() {
+        console.log('Failed to load new image, skipping animation');
+        $('#albumart-current').attr('src', newArtUrl);
+        isAnimating = false;
+        currentAlbumArt = newArtUrl;
+    };
+    
+    newImg.src = newArtUrl;
+}
+
 function updateUI() {
     if (!fb) {
         return;
@@ -112,15 +160,24 @@ function updateUI() {
     console.log('Track info:', fb.helper1, '-', fb.helper2);
     console.log('Is playing/paused:', fb.isPlaying, '/', fb.isPaused);
     
-    // Update album art using the [ALBUMART] macro from state JSON
+    // Update album art with sliding animation
     if (fb.albumArt && fb.albumArt !== '' && fb.albumArt !== '[ALBUMART]') {
-        console.log('Setting album art to:', fb.albumArt);
-        $('#albumart').attr('src', fb.albumArt).show();
-        $('#fallback').hide();
+        if (currentAlbumArt !== fb.albumArt && !isAnimating) {
+            console.log('Album art changed, animating to:', fb.albumArt);
+            animateAlbumArt(fb.albumArt);
+        } else if (currentAlbumArt === null) {
+            // First time loading
+            console.log('Setting initial album art to:', fb.albumArt);
+            $('#albumart-current').attr('src', fb.albumArt).show();
+            $('#fallback').hide();
+            currentAlbumArt = fb.albumArt;
+        }
     } else {
         console.log('No album art available, showing fallback');
-        $('#albumart').hide();
+        $('#albumart-current').hide();
+        $('#albumart-next').hide();
         $('#fallback').show();
+        currentAlbumArt = null;
     }
     
     // Update play/pause button
