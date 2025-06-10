@@ -113,13 +113,18 @@ function animateAlbumArt(newArtUrl) {
     // Preload the new image to ensure smooth animation
     var newImg = new Image();
     newImg.onload = function() {
-        console.log('New image preloaded, starting animation');
+        console.log('New image preloaded, starting bounce animation');
         
         // Set up the next album art image
         $('#albumart-next').attr('src', newArtUrl).show();
         
-        // Animate the wrapper to slide left
-        $('#albumart-wrapper').css('transform', 'translateX(-100%)');
+        // Remove any existing animation classes
+        $('#albumart-wrapper').removeClass('bouncing');
+        
+        // Trigger the bouncing animation
+        setTimeout(function() {
+            $('#albumart-wrapper').addClass('bouncing');
+        }, 10);
         
         // After animation completes
         setTimeout(function() {
@@ -127,18 +132,15 @@ function animateAlbumArt(newArtUrl) {
             $('#albumart-current').attr('src', newArtUrl);
             $('#albumart-next').hide();
             
-            // Reset the wrapper position instantly
-            $('#albumart-wrapper').css('transition', 'none');
+            // Remove animation class and reset position
+            $('#albumart-wrapper').removeClass('bouncing');
             $('#albumart-wrapper').css('transform', 'translateX(0)');
             
-            // Re-enable transitions after a short delay
-            setTimeout(function() {
-                $('#albumart-wrapper').css('transition', 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)');
-                isAnimating = false;
-                currentAlbumArt = newArtUrl;
-                console.log('Animation complete');
-            }, 50);
-        }, 600); // Match CSS animation duration
+            // Complete the animation
+            isAnimating = false;
+            currentAlbumArt = newArtUrl;
+            console.log('Bounce animation complete');
+        }, 800); // Match new animation duration
     };
     
     newImg.onerror = function() {
