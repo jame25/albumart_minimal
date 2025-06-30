@@ -62,9 +62,56 @@ The template includes these optimizations:
 - **Dynamic updates**: Real-time synchronization with foobar2000 playback
 
 ### Album Art Sources
-- Embedded album art (preferred)
-- External files: `folder.jpg`, `*.jpg` in track directory
-- Fallback: Template icon (`img/icon1rx.png`)
+- **Local Files**: Embedded album art and external files (`folder.jpg`, `*.jpg`)
+- **Internet Radio Streams**: Automatic Last.fm artwork lookup
+- **Fallback**: Template icon when no artwork is available
+
+### 📻 **Internet Radio Stream Support**
+This template includes full support for internet radio streams with automatic artwork:
+
+#### **Automatic Metadata Detection**
+- Real-time detection of track changes in internet radio streams
+- Automatic artist and title extraction from stream metadata
+- HTML entity decoding for proper character handling
+
+#### **Last.fm Integration**
+- Automatic Last.fm API lookup when stream artwork is unavailable
+- High-quality artwork retrieval
+- Smart caching to prevent duplicate API calls
+- Multiple CORS proxy fallbacks for reliable access
+
+#### **Stream vs Local File Detection**
+- Intelligent detection between local files and streaming content
+- Local files use standard foobar2000 album art (embedded/external)
+- Streams automatically fall back to Last.fm when no artwork is provided
+
+#### **Enhanced foo_httpcontrol Component**
+This template requires a **modified foo_httpcontrol component** that includes:
+- Dynamic metadata change detection for internet radio
+- Proper callback registration for `on_playback_dynamic_info_track`
+- Real-time state updates when stream metadata changes
+
+### Requirements for Internet Radio Support
+
+#### **Modified foo_httpcontrol Component**
+The template requires an enhanced version of foo_httpcontrol with these additions:
+```cpp
+// Added to get_flags() in callbacks.cpp:
+flag_on_playback_dynamic_info | flag_on_playback_dynamic_info_track
+
+// Added callback implementations:
+void on_playback_dynamic_info_track(const file_info& p_info) {
+    httpc::state_changed |= httpc::FSC_PLAYBACK;
+    httpc::should_update_playlist = true;
+}
+```
+
+#### **Last.fm API Key**
+- Get a free API key from [Last.fm API](https://www.last.fm/api/account/create)
+- Add your API key to `js/albumart_player.js`:
+```javascript
+var lastfm_api_key = "your_api_key_here";
+```
 
 ## Customization
 
