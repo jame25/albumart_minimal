@@ -93,19 +93,6 @@ This template requires a **modified foo_httpcontrol component** that includes:
 
 ### Requirements for Internet Radio Support
 
-#### **Modified foo_httpcontrol Component**
-The template requires an enhanced version of foo_httpcontrol with these additions:
-```cpp
-// Added to get_flags() in callbacks.cpp:
-flag_on_playback_dynamic_info | flag_on_playback_dynamic_info_track
-
-// Added callback implementations:
-void on_playback_dynamic_info_track(const file_info& p_info) {
-    httpc::state_changed |= httpc::FSC_PLAYBACK;
-    httpc::should_update_playlist = true;
-}
-```
-
 #### **Last.fm API Key**
 - Get a free API key from [Last.fm API](https://www.last.fm/api/account/create)
 - Add your API key to `js/albumart_player.js`:
