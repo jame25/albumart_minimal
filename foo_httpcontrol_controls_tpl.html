@@ -41,9 +41,9 @@
         }
         
         .albumart {
-            width: 100%;
+            width: auto;
             height: auto;
-            max-width: 100%;
+            max-width: 90vw;
             max-height: 90vh;
             border-radius: 8px;
             box-shadow: 0 0 50px rgba(255, 255, 255, 0.1);
@@ -157,7 +157,7 @@
     
     <div id="albumart-container">
         <div class="albumart-wrapper" id="albumart-wrapper">
-            <img id="albumart-current" class="albumart" src="[ALBUMART]" alt="Album Art" />
+            <img id="albumart-current" class="albumart" src="[ALBUMART]" alt="Album Art" onerror="this.style.display='none'; document.getElementById('fallback').style.display='flex';" onload="this.style.display='block'; document.getElementById('fallback').style.display='none';" />
             <img id="albumart-next" class="albumart" style="display: none;" alt="Next Album Art" />
         </div>
         <div id="fallback" class="fallback-art" style="display: none;">
