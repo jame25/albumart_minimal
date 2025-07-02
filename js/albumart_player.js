@@ -13,6 +13,7 @@ var discogs_consumer_key = ""; // Add your Discogs Consumer Key here
 var discogs_consumer_secret = ""; // Add your Discogs Consumer Secret here
 var lastfm_cache = {};
 var discogs_cache = {};
+var itunes_cache = {};
 
 function decodeHtmlEntities(text) {
     var tempDiv = document.createElement('div');
@@ -329,16 +330,136 @@ function tryApiLookupForStream() {
     
     console.log('Decoded artist:', artist, 'title:', title);
     
-    // Try Discogs first if API key or consumer key is configured
-    if ((discogs_api_key && discogs_api_key !== '') || (discogs_consumer_key && discogs_consumer_key !== '')) {
-        tryDiscogsForStream(artist, title);
-    } else {
-        // Fall back to Last.fm
-        tryLastFmForStream(artist, title);
+    // Try iTunes first (no API key required)
+    tryItunesForStream(artist, title);
+}
+
+function tryItunesForStream(artist, title) {
+    var cacheKey = artist + '|' + title;
+    
+    // Check cache first
+    if (itunes_cache[cacheKey]) {
+        if (itunes_cache[cacheKey] === 'not_found') {
+            console.log('iTunes cache shows not found, trying Discogs');
+            tryDiscogsForStream(artist, title);
+        } else {
+            console.log('Using cached iTunes artwork:', itunes_cache[cacheKey]);
+            setArtwork(itunes_cache[cacheKey]);
+        }
+        return;
+    }
+    
+    console.log('Trying iTunes lookup for internet radio stream:', artist, '-', title);
+    
+    // iTunes Search API endpoint
+    var query = encodeURIComponent(artist + ' ' + title);
+    var itunesUrl = "https://itunes.apple.com/search?term=" + query + 
+                    "&media=music&entity=album&limit=5";
+    
+    // Try multiple CORS proxy services
+    var corsProxies = [
+        'https://api.allorigins.win/get?url=',
+        'https://corsproxy.io/?',
+        'https://cors-anywhere.herokuapp.com/',
+        'https://crossorigin.me/',
+        'https://api.codetabs.com/v1/proxy?quest='
+    ];
+    
+    // First try without proxy
+    var tryDirectly = function() {
+        console.log('Trying iTunes API directly (no proxy)');
+        $.ajax({
+            url: itunesUrl,
+            type: 'GET',
+            timeout: 8000,
+            success: function(data) {
+                handleItunesResponse(data, artist, title, cacheKey, function() {
+                    tryWithProxy(0);
+                });
+            },
+            error: function(jqxhr, textStatus, error) {
+                console.log('Direct iTunes API failed, trying proxies:', error);
+                tryWithProxy(0);
+            }
+        });
+    };
+
+    var tryWithProxy = function(proxyIndex) {
+        if (proxyIndex >= corsProxies.length) {
+            console.log('All iTunes CORS proxies failed, trying Discogs');
+            itunes_cache[cacheKey] = 'not_found';
+            tryDiscogsForStream(artist, title);
+            return;
+        }
+        
+        var proxyUrl = corsProxies[proxyIndex] + encodeURIComponent(itunesUrl);
+        console.log('Trying iTunes via proxy:', corsProxies[proxyIndex]);
+        
+        $.ajax({
+            url: proxyUrl,
+            type: 'GET',
+            timeout: 10000,
+            success: function(data) {
+                handleItunesResponse(data, artist, title, cacheKey, function() {
+                    tryWithProxy(proxyIndex + 1);
+                });
+            },
+            error: function(jqxhr, textStatus, error) {
+                console.log('iTunes proxy failed:', corsProxies[proxyIndex], 'Error:', error);
+                tryWithProxy(proxyIndex + 1);
+            }
+        });
+    };
+    
+    // Start with direct attempt
+    tryDirectly();
+}
+
+function handleItunesResponse(data, artist, title, cacheKey, onError) {
+    try {
+        // Handle different proxy response formats
+        var responseData = data;
+        if (data.contents) responseData = data.contents; // allorigins format
+        if (typeof responseData === 'string') responseData = JSON.parse(responseData);
+        
+        console.log('iTunes response:', responseData);
+        
+        var album_url = null;
+        if (responseData.results && responseData.results.length > 0) {
+            // Look for the best match with artwork
+            for (var i = 0; i < responseData.results.length; i++) {
+                var result = responseData.results[i];
+                if (result.artworkUrl100) {
+                    // Convert to higher resolution artwork
+                    album_url = result.artworkUrl100.replace('100x100bb', '600x600bb');
+                    break;
+                }
+            }
+        }
+        
+        if (album_url && album_url.trim() !== '') {
+            console.log('Found iTunes artwork for stream:', album_url);
+            itunes_cache[cacheKey] = album_url;
+            setArtwork(album_url);
+        } else {
+            console.log('No artwork found in iTunes response, trying Discogs');
+            itunes_cache[cacheKey] = 'not_found';
+            tryDiscogsForStream(artist, title);
+        }
+    } catch (e) {
+        console.log('iTunes response parsing error:', e);
+        if (onError) onError();
     }
 }
 
 function tryDiscogsForStream(artist, title) {
+    // Check if Discogs API credentials are configured
+    if (!((discogs_api_key && discogs_api_key !== '') || (discogs_consumer_key && discogs_consumer_key !== ''))) {
+        console.log('No Discogs credentials configured, trying Last.fm');
+        tryLastFmForStream(artist, title);
+        return;
+    }
+    
     var cacheKey = artist + '|' + title;
     
     // Check cache first
