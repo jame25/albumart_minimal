@@ -6,9 +6,13 @@ var currentAlbumArt = null;
 var isAnimating = false;
 var lastTrackInfo = '';
 
-// Last.fm API configuration for internet radio streams
-var lastfm_api_key = "your_api_key_here";
+// API configuration for internet radio streams
+var lastfm_api_key = "";
+var discogs_api_key = ""; // Add your Discogs API key here
+var discogs_consumer_key = ""; // Add your Discogs Consumer Key here  
+var discogs_consumer_secret = ""; // Add your Discogs Consumer Secret here
 var lastfm_cache = {};
+var discogs_cache = {};
 
 function decodeHtmlEntities(text) {
     var tempDiv = document.createElement('div');
@@ -267,10 +271,10 @@ function updateAlbumArt() {
                     currentAlbumArt = albumArtSrc;
                 }
             } else {
-                console.log('No real album art available (got fallback image), trying Last.fm for internet radio');
+                console.log('No real album art available (got fallback image), trying API lookup for internet radio');
                 console.log('Album art src was:', albumArtSrc);
                 // No real album art found - this could be an internet radio stream
-                tryLastFmForStream();
+                tryApiLookupForStream();
             }
         },
         error: function(jqxhr, textStatus, error) {
@@ -313,15 +317,9 @@ $(document).ready(function() {
     retrievestate_schedule(100);
 });
 
-function tryLastFmForStream() {
-    if (!lastfm_api_key || lastfm_api_key === '') {
-        console.log('Last.fm API key not configured');
-        showFallback();
-        return;
-    }
-    
+function tryApiLookupForStream() {
     if (!fb || !fb.helper1 || !fb.helper2) {
-        console.log('Missing track info for Last.fm lookup');
+        console.log('Missing track info for API lookup');
         showFallback();
         return;
     }
@@ -331,6 +329,158 @@ function tryLastFmForStream() {
     
     console.log('Decoded artist:', artist, 'title:', title);
     
+    // Try Discogs first if API key or consumer key is configured
+    if ((discogs_api_key && discogs_api_key !== '') || (discogs_consumer_key && discogs_consumer_key !== '')) {
+        tryDiscogsForStream(artist, title);
+    } else {
+        // Fall back to Last.fm
+        tryLastFmForStream(artist, title);
+    }
+}
+
+function tryDiscogsForStream(artist, title) {
+    var cacheKey = artist + '|' + title;
+    
+    // Check cache first
+    if (discogs_cache[cacheKey]) {
+        if (discogs_cache[cacheKey] === 'not_found') {
+            console.log('Discogs cache shows not found, trying Last.fm');
+            tryLastFmForStream(artist, title);
+        } else {
+            console.log('Using cached Discogs artwork:', discogs_cache[cacheKey]);
+            setArtwork(discogs_cache[cacheKey]);
+        }
+        return;
+    }
+    
+    console.log('Trying Discogs lookup for internet radio stream:', artist, '-', title);
+    
+    // Discogs search API endpoint with flexible authentication
+    var query = encodeURIComponent(artist + ' - ' + title);
+    var discogsUrl;
+    
+    if (discogs_api_key && discogs_api_key !== '') {
+        // Use personal access token
+        discogsUrl = "https://api.discogs.com/database/search?q=" + query + 
+                     "&type=release&token=" + discogs_api_key;
+    } else if (discogs_consumer_key && discogs_consumer_key !== '') {
+        // Use consumer key/secret
+        discogsUrl = "https://api.discogs.com/database/search?q=" + query + 
+                     "&type=release&key=" + discogs_consumer_key + "&secret=" + discogs_consumer_secret;
+    } else {
+        console.log('No Discogs credentials configured');
+        tryLastFmForStream(artist, title);
+        return;
+    }
+    
+    // Try multiple CORS proxy services with additional options
+    var corsProxies = [
+        'https://api.allorigins.win/get?url=',
+        'https://corsproxy.io/?',
+        'https://cors-anywhere.herokuapp.com/',
+        'https://crossorigin.me/',
+        'https://api.codetabs.com/v1/proxy?quest='
+    ];
+    
+    // First try without proxy (might work in some browsers/environments)
+    var tryDirectly = function() {
+        console.log('Trying Discogs API directly (no proxy)');
+        $.ajax({
+            url: discogsUrl,
+            type: 'GET',
+            timeout: 8000,
+            headers: {
+                'User-Agent': 'foobar2000HttpControl/1.0'
+            },
+            success: function(data) {
+                handleDiscogsResponse(data, artist, title, cacheKey, function() {
+                    tryWithProxy(0);
+                });
+            },
+            error: function(jqxhr, textStatus, error) {
+                console.log('Direct Discogs API failed, trying proxies:', error);
+                tryWithProxy(0);
+            }
+        });
+    };
+
+    var tryWithProxy = function(proxyIndex) {
+        if (proxyIndex >= corsProxies.length) {
+            console.log('All Discogs CORS proxies failed, trying Last.fm');
+            discogs_cache[cacheKey] = 'not_found';
+            tryLastFmForStream(artist, title);
+            return;
+        }
+        
+        var proxyUrl = corsProxies[proxyIndex] + encodeURIComponent(discogsUrl);
+        console.log('Trying Discogs via proxy:', corsProxies[proxyIndex]);
+        
+        $.ajax({
+            url: proxyUrl,
+            type: 'GET',
+            timeout: 10000,
+            headers: {
+                'User-Agent': 'foobar2000HttpControl/1.0'
+            },
+            success: function(data) {
+                handleDiscogsResponse(data, artist, title, cacheKey, function() {
+                    tryWithProxy(proxyIndex + 1);
+                });
+            },
+            error: function(jqxhr, textStatus, error) {
+                console.log('Discogs proxy failed:', corsProxies[proxyIndex], 'Error:', error);
+                tryWithProxy(proxyIndex + 1);
+            }
+        });
+    };
+    
+    // Start with direct attempt
+    tryDirectly();
+}
+
+function handleDiscogsResponse(data, artist, title, cacheKey, onError) {
+    try {
+        // Handle different proxy response formats
+        var responseData = data;
+        if (data.contents) responseData = data.contents; // allorigins format
+        if (typeof responseData === 'string') responseData = JSON.parse(responseData);
+        
+        console.log('Discogs response:', responseData);
+        
+        var album_url = null;
+        if (responseData.results && responseData.results.length > 0) {
+            // Look for the best match with cover art
+            for (var i = 0; i < Math.min(responseData.results.length, 5); i++) {
+                var result = responseData.results[i];
+                if (result.cover_image && result.cover_image !== '') {
+                    album_url = result.cover_image;
+                    break;
+                }
+            }
+        }
+        
+        if (album_url && album_url.trim() !== '') {
+            console.log('Found Discogs artwork for stream:', album_url);
+            discogs_cache[cacheKey] = album_url;
+            setArtwork(album_url);
+        } else {
+            console.log('No artwork found in Discogs response, trying Last.fm');
+            discogs_cache[cacheKey] = 'not_found';
+            tryLastFmForStream(artist, title);
+        }
+    } catch (e) {
+        console.log('Discogs response parsing error:', e);
+        if (onError) onError();
+    }
+}
+
+function tryLastFmForStream(artist, title) {
+    if (!lastfm_api_key || lastfm_api_key === '') {
+        console.log('Last.fm API key not configured');
+        showFallback();
+        return;
+    }
+    
     var cacheKey = artist + '|' + title;
     
     // Check cache first
@@ -339,7 +489,7 @@ function tryLastFmForStream() {
             showFallback();
         } else {
             console.log('Using cached Last.fm artwork:', lastfm_cache[cacheKey]);
-            setLastFmArtwork(lastfm_cache[cacheKey]);
+            setArtwork(lastfm_cache[cacheKey]);
         }
         return;
     }
@@ -362,7 +512,7 @@ function tryLastFmForStream() {
     
     var tryWithProxy = function(proxyIndex) {
         if (proxyIndex >= corsProxies.length) {
-            console.log('All CORS proxies failed');
+            console.log('All Last.fm CORS proxies failed');
             lastfm_cache[cacheKey] = 'not_found';
             showFallback();
             return;
@@ -412,7 +562,7 @@ function tryLastFmForStream() {
                     if (album_url && album_url.trim() !== '') {
                         console.log('Found Last.fm artwork for stream:', album_url);
                         lastfm_cache[cacheKey] = album_url;
-                        setLastFmArtwork(album_url);
+                        setArtwork(album_url);
                     } else {
                         console.log('No artwork found in Last.fm response');
                         lastfm_cache[cacheKey] = 'not_found';
@@ -433,12 +583,12 @@ function tryLastFmForStream() {
     tryWithProxy(0);
 }
 
-function setLastFmArtwork(artworkUrl) {
+function setArtwork(artworkUrl) {
     if (currentAlbumArt !== artworkUrl && !isAnimating) {
-        console.log('Setting Last.fm artwork with animation:', artworkUrl);
+        console.log('Setting artwork with animation:', artworkUrl);
         animateAlbumArt(artworkUrl);
     } else if (currentAlbumArt === null) {
-        console.log('Setting initial Last.fm artwork:', artworkUrl);
+        console.log('Setting initial artwork:', artworkUrl);
         $('#albumart-current').attr('src', artworkUrl).show();
         $('#fallback').hide();
         currentAlbumArt = artworkUrl;
