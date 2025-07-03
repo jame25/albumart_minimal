@@ -7,8 +7,9 @@ var isAnimating = false;
 var lastTrackInfo = '';
 
 // API configuration for internet radio streams
+var enable_itunes_api = true; // Set to false to disable iTunes API search
 var lastfm_api_key = "";
-var discogs_api_key = ""; // Add your Discogs API key here
+var discogs_api_key = "";
 var discogs_consumer_key = ""; // Add your Discogs Consumer Key here  
 var discogs_consumer_secret = ""; // Add your Discogs Consumer Secret here
 var lastfm_cache = {};
@@ -330,8 +331,13 @@ function tryApiLookupForStream() {
     
     console.log('Decoded artist:', artist, 'title:', title);
     
-    // Try iTunes first (no API key required)
-    tryItunesForStream(artist, title);
+    // Try iTunes first if enabled
+    if (enable_itunes_api) {
+        tryItunesForStream(artist, title);
+    } else {
+        console.log('iTunes API disabled, trying Discogs');
+        tryDiscogsForStream(artist, title);
+    }
 }
 
 function tryItunesForStream(artist, title) {
