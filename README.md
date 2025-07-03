@@ -40,7 +40,7 @@ A clean, minimalist web interface for foobar2000 that displays full-screen album
 ## Installation
 
 1. **Install foo_httpcontrol component** in foobar2000
-2. **Copy the albumart_minimal folder** to your foo_httpcontrol templates directory
+2. **Copy the albumart_minimal folder** to your foo_httpcontrol directory (i.e %appdata%\foobar2000-v2\foo_httpcontrol_data\)
 3. **Configure HTTP server** in foobar2000 preferences
 4. **Access the template** via: `http://localhost:8888/albumart_minimal/`
    - Replace `localhost:8888` with your actual server address and port
