@@ -75,8 +75,8 @@ This template includes full support for internet radio streams with automatic ar
 - HTML entity decoding for proper character handling
 
 #### **Multi-Source Artwork Integration**
-- **iTunes Search API**: Primary source for high-quality album artwork (no API key required)
-- **Discogs.com API**: Secondary source for comprehensive music database coverage
+- **Deezer API**: Primary source for high-quality album artwork (no API key required)
+- **Discogs.com API**: Secondary source for comprehensive music database coverage  
 - **Last.fm API**: Final fallback source for maximum compatibility
 - High-quality artwork retrieval (600x600 for iTunes)
 - Smart caching to prevent duplicate API calls
@@ -110,10 +110,11 @@ void on_playback_dynamic_info_track(const file_info& p_info) {
 
 #### **API Keys Configuration**
 
-**iTunes Search API (Primary - No Setup Required)**
-- No API key needed! iTunes Search API works immediately
-- Provides high-quality 600x600 album artwork
-- Searches Apple's comprehensive music database
+**Deezer API (Primary - No Setup Required)**
+- No API key needed! Deezer API works immediately
+- Provides high-quality album artwork
+- Searches Deezer's comprehensive music database
+- **To disable**: Set `var enable_deezer_api = false;` in `js/albumart_player.js`
 
 **Discogs.com API Key (Secondary - Optional)**
 - Get a free API token from [Discogs Developer Settings](https://www.discogs.com/settings/developers)
