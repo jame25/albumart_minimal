@@ -7,14 +7,15 @@ var isAnimating = false;
 var lastTrackInfo = '';
 
 // API configuration for internet radio streams
-var enable_itunes_api = true; // Set to false to disable iTunes API search
+var enable_deezer_api = true; // Set to false to disable Deezer API search
+var skip_direct_api_calls = true; // Set to false to try direct API calls before proxies
 var lastfm_api_key = "";
 var discogs_api_key = "";
 var discogs_consumer_key = ""; // Add your Discogs Consumer Key here  
 var discogs_consumer_secret = ""; // Add your Discogs Consumer Secret here
 var lastfm_cache = {};
 var discogs_cache = {};
-var itunes_cache = {};
+var deezer_cache = {};
 
 function decodeHtmlEntities(text) {
     var tempDiv = document.createElement('div');
@@ -331,41 +332,40 @@ function tryApiLookupForStream() {
     
     console.log('Decoded artist:', artist, 'title:', title);
     
-    // Try iTunes first if enabled
-    if (enable_itunes_api) {
-        tryItunesForStream(artist, title);
+    // Try Deezer first if enabled
+    if (enable_deezer_api) {
+        tryDeezerForStream(artist, title);
     } else {
-        console.log('iTunes API disabled, trying Discogs');
+        console.log('Deezer API disabled, trying Discogs');
         tryDiscogsForStream(artist, title);
     }
 }
 
-function tryItunesForStream(artist, title) {
+function tryDeezerForStream(artist, title) {
     var cacheKey = artist + '|' + title;
     
     // Check cache first
-    if (itunes_cache[cacheKey]) {
-        if (itunes_cache[cacheKey] === 'not_found') {
-            console.log('iTunes cache shows not found, trying Discogs');
+    if (deezer_cache[cacheKey]) {
+        if (deezer_cache[cacheKey] === 'not_found') {
+            console.log('Deezer cache shows not found, trying Discogs');
             tryDiscogsForStream(artist, title);
         } else {
-            console.log('Using cached iTunes artwork:', itunes_cache[cacheKey]);
-            setArtwork(itunes_cache[cacheKey]);
+            console.log('Using cached Deezer artwork:', deezer_cache[cacheKey]);
+            setArtwork(deezer_cache[cacheKey]);
         }
         return;
     }
     
-    console.log('Trying iTunes lookup for internet radio stream:', artist, '-', title);
+    console.log('Trying Deezer lookup for internet radio stream:', artist, '-', title);
     
-    // iTunes Search API endpoint
+    // Deezer Search API endpoint - search for tracks
     var query = encodeURIComponent(artist + ' ' + title);
-    var itunesUrl = "https://itunes.apple.com/search?term=" + query + 
-                    "&media=music&entity=album&limit=5";
+    var deezerUrl = "https://api.deezer.com/search/track?q=" + query + "&limit=5";
     
-    // Try multiple CORS proxy services
+    // Try multiple CORS proxy services (ordered by reliability)
     var corsProxies = [
+        'https://corsproxy.io/?',  // Most reliable for Deezer
         'https://api.allorigins.win/get?url=',
-        'https://corsproxy.io/?',
         'https://cors-anywhere.herokuapp.com/',
         'https://crossorigin.me/',
         'https://api.codetabs.com/v1/proxy?quest='
@@ -373,18 +373,18 @@ function tryItunesForStream(artist, title) {
     
     // First try without proxy
     var tryDirectly = function() {
-        console.log('Trying iTunes API directly (no proxy)');
+        console.log('Trying Deezer API directly (no proxy)');
         $.ajax({
-            url: itunesUrl,
+            url: deezerUrl,
             type: 'GET',
-            timeout: 8000,
+            timeout: 3000,
             success: function(data) {
-                handleItunesResponse(data, artist, title, cacheKey, function() {
+                handleDeezerResponse(data, artist, title, cacheKey, function() {
                     tryWithProxy(0);
                 });
             },
             error: function(jqxhr, textStatus, error) {
-                console.log('Direct iTunes API failed, trying proxies:', error);
+                console.log('Direct Deezer API failed, trying proxies:', error);
                 tryWithProxy(0);
             }
         });
@@ -392,68 +392,81 @@ function tryItunesForStream(artist, title) {
 
     var tryWithProxy = function(proxyIndex) {
         if (proxyIndex >= corsProxies.length) {
-            console.log('All iTunes CORS proxies failed, trying Discogs');
-            itunes_cache[cacheKey] = 'not_found';
+            console.log('All Deezer CORS proxies failed, trying Discogs');
+            deezer_cache[cacheKey] = 'not_found';
             tryDiscogsForStream(artist, title);
             return;
         }
         
-        var proxyUrl = corsProxies[proxyIndex] + encodeURIComponent(itunesUrl);
-        console.log('Trying iTunes via proxy:', corsProxies[proxyIndex]);
+        var proxyUrl = corsProxies[proxyIndex] + encodeURIComponent(deezerUrl);
+        console.log('Trying Deezer via proxy:', corsProxies[proxyIndex]);
         
         $.ajax({
             url: proxyUrl,
             type: 'GET',
-            timeout: 10000,
+            timeout: 5000,
             success: function(data) {
-                handleItunesResponse(data, artist, title, cacheKey, function() {
+                handleDeezerResponse(data, artist, title, cacheKey, function() {
                     tryWithProxy(proxyIndex + 1);
                 });
             },
             error: function(jqxhr, textStatus, error) {
-                console.log('iTunes proxy failed:', corsProxies[proxyIndex], 'Error:', error);
+                console.log('Deezer proxy failed:', corsProxies[proxyIndex], 'Error:', error);
                 tryWithProxy(proxyIndex + 1);
             }
         });
     };
     
-    // Start with direct attempt
-    tryDirectly();
+    // Start with direct attempt or skip to proxies
+    if (skip_direct_api_calls) {
+        console.log('Skipping direct API call, using proxies immediately');
+        tryWithProxy(0);
+    } else {
+        tryDirectly();
+    }
 }
 
-function handleItunesResponse(data, artist, title, cacheKey, onError) {
+function handleDeezerResponse(data, artist, title, cacheKey, onError) {
     try {
         // Handle different proxy response formats
         var responseData = data;
         if (data.contents) responseData = data.contents; // allorigins format
         if (typeof responseData === 'string') responseData = JSON.parse(responseData);
         
-        console.log('iTunes response:', responseData);
+        console.log('Deezer response:', responseData);
         
         var album_url = null;
-        if (responseData.results && responseData.results.length > 0) {
-            // Look for the best match with artwork
-            for (var i = 0; i < responseData.results.length; i++) {
-                var result = responseData.results[i];
-                if (result.artworkUrl100) {
-                    // Convert to higher resolution artwork
-                    album_url = result.artworkUrl100.replace('100x100bb', '600x600bb');
+        if (responseData.data && responseData.data.length > 0) {
+            // Look for the best match with album artwork
+            for (var i = 0; i < responseData.data.length; i++) {
+                var track = responseData.data[i];
+                if (track.album && track.album.cover_xl) {
+                    // Use the highest quality cover (cover_xl)
+                    album_url = track.album.cover_xl;
+                    break;
+                } else if (track.album && track.album.cover_big) {
+                    // Fallback to cover_big
+                    album_url = track.album.cover_big;
+                    break;
+                } else if (track.album && track.album.cover_medium) {
+                    // Fallback to cover_medium
+                    album_url = track.album.cover_medium;
                     break;
                 }
             }
         }
         
         if (album_url && album_url.trim() !== '') {
-            console.log('Found iTunes artwork for stream:', album_url);
-            itunes_cache[cacheKey] = album_url;
+            console.log('Found Deezer artwork for stream:', album_url);
+            deezer_cache[cacheKey] = album_url;
             setArtwork(album_url);
         } else {
-            console.log('No artwork found in iTunes response, trying Discogs');
-            itunes_cache[cacheKey] = 'not_found';
+            console.log('No artwork found in Deezer response, trying Discogs');
+            deezer_cache[cacheKey] = 'not_found';
             tryDiscogsForStream(artist, title);
         }
     } catch (e) {
-        console.log('iTunes response parsing error:', e);
+        console.log('Deezer response parsing error:', e);
         if (onError) onError();
     }
 }
